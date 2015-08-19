@@ -18,6 +18,18 @@ Apache License or the GPL License is distributed on an "AS IS" BASIS, WITHOUT WA
 CONDITIONS OF ANY KIND, either express or implied. See the Apache License and the GPL License for
 the specific language governing permissions and limitations under the Apache License and the GPL License.
 */
+
+Array.prototype.remove = function() {
+    var what, a = arguments, L = a.length, ax;
+    while (L && this.length) {
+        what = a[--L];
+        while ((ax = this.indexOf(what)) !== -1) {
+            this.splice(ax, 1);
+        }
+    }
+    return this;
+};
+
 (function ($) {
     if(typeof $.fn.each2 == "undefined") {
         $.extend($.fn, {
@@ -3287,8 +3299,7 @@ the specific language governing permissions and limitations under the Apache Lic
         // multi
         unselect: function (selected) {
             var val = this.getVal(),
-                data,
-                index;
+                data, index, help;
             selected = selected.closest(".select2-search-choice");
 
             if (selected.length === 0) {
@@ -3302,9 +3313,9 @@ the specific language governing permissions and limitations under the Apache Lic
                 // and invoked on an element already removed
                 return;
             }
-
+            help = this.id(data);
             var evt = $.Event("select2-removing");
-            evt.val = this.id(data);
+            evt.val = help;
             evt.choice = data;
             this.opts.element.trigger(evt);
 
@@ -3312,8 +3323,17 @@ the specific language governing permissions and limitations under the Apache Lic
                 return false;
             }
 
-            while((index = indexOf(this.id(data), val)) >= 0) {
-                val.splice(index, 1);
+            index = (function () {
+                if (!$.isArray(help)) {
+                    help = [help];
+                }
+                return $(help).filter(function (index, element) {
+                    return indexOf(element, val) < 0;
+                }).length < 0 ? -1 : 1;
+            })();
+
+            if (index >= 0) {
+                Array.prototype.remove.apply(val, help);
                 this.setVal(val);
                 if (this.select) this.postprocessResults();
             }
@@ -3334,7 +3354,22 @@ the specific language governing permissions and limitations under the Apache Lic
                 self = this;
 
             choices.each2(function (i, choice) {
-                var id = self.id(choice.data("select2-data"));
+                var id = self.id(choice.data("select2-data")),
+                    parent = choice.parent().parent(),
+                    siblings = choice
+                        .siblings(".select2-result-selectable")
+                        .andSelf(),
+                    selectedSiblings = 0;
+                if (parent.length > 0) {
+                    if (parent.hasClass("select2-selected")) return;
+                    siblings.map(function () {
+                        indexOf(self.id($(this).data("select2-data")),val) >= 0 ? selectedSiblings++ : null;
+                    });
+                    if (selectedSiblings === siblings.length) {
+                        parent.addClass("select2-selected");
+                        return;
+                    }
+                }
                 if (indexOf(id, val) >= 0) {
                     choice.addClass("select2-selected");
                     // mark all children of the selected parent as selected
@@ -3343,7 +3378,7 @@ the specific language governing permissions and limitations under the Apache Lic
             });
 
             compound.each2(function(i, choice) {
-                // hide an optgroup if it doesn't have any selectable children
+                // hide an optgroup if it doesnt have any selectable children
                 if (!choice.is('.select2-result-selectable')
                     && choice.find(".select2-result-selectable:not(.select2-selected)").length === 0) {
                     choice.addClass("select2-selected");
